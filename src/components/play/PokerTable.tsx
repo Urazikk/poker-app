@@ -12,39 +12,39 @@ interface PokerTableProps {
 export default function PokerTable({ state, showdown }: PokerTableProps) {
   const totalPot = state.pots.reduce((sum, p) => sum + p.amount, 0);
 
-  // Positions des sieges autour de la table (bas = hero, haut-gauche et haut-droite = bots)
+  // Positions des sieges façon "bureau" : Hero centré en bas, Bot1/Bot2 en haut gauche/droite
   const seatPositions = [
-    "bottom-4 left-1/2 -translate-x-1/2",      // Hero (index 0 ou BTN au debut)
-    "top-4 left-8",                               // Bot 1
-    "top-4 right-8",                              // Bot 2
+    "bottom-[-10%] left-1/2 -translate-x-1/2",    // Hero (index 0)
+    "top-[5%] left-[5%]",                         // Bot 1
+    "top-[5%] right-[5%]",                        // Bot 2
   ];
 
   return (
-    <div className="relative w-full max-w-3xl mx-auto aspect-[16/10]">
-      {/* Table ovale */}
-      <div className="absolute inset-0 rounded-[50%] bg-gradient-to-b from-emerald-800 to-emerald-950 border-[6px] border-amber-800/60 shadow-2xl shadow-black/50" />
-      <div className="absolute inset-3 rounded-[50%] border border-emerald-600/30" />
+    <div className="relative w-full max-w-4xl mx-auto aspect-[2/1] mt-8 mb-16">
+      {/* Table ovale Winamax */}
+      <div className="absolute inset-0 rounded-[100px] winamax-table" />
+      <div className="absolute inset-4 rounded-[85px] border-2 border-white/5 opacity-50" />
 
-      {/* Pot */}
+      {/* Pot Area */}
       {totalPot > 0 && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
-          <div className="bg-black/50 rounded-full px-4 py-1.5 border border-amber-500/30 backdrop-blur-sm">
-            <span className="text-amber-400 font-bold text-lg font-mono">{totalPot}</span>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[120%] z-10 flex flex-col items-center">
+          <div className="bg-black/80 rounded-full px-5 py-1.5 border border-white/10 shadow-lg">
+            <span className="text-white font-bold text-xl drop-shadow-md">Winamax Pot: {totalPot}</span>
           </div>
         </div>
       )}
 
       {/* Community Cards */}
       {state.communityCards.length > 0 && (
-        <div className="absolute top-[38%] left-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-1.5 z-10">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-2 z-10 p-2 bg-black/20 rounded-2xl backdrop-blur-sm">
           {state.communityCards.map((card, i) => (
-            <CardComponent key={i} card={card} size="sm" />
+            <CardComponent key={i} card={card} size="lg" />
           ))}
         </div>
       )}
 
-      {/* Blinds info */}
-      <div className="absolute top-2 left-1/2 -translate-x-1/2 text-xs text-neutral-400 bg-black/40 rounded-full px-3 py-1 z-10">
+      {/* Blinds info / Dealer button area */}
+      <div className="absolute bottom-1/4 left-1/2 -translate-x-1/2 text-xs text-white/50 bg-black/60 rounded-full px-4 py-1 z-10 shadow-inner">
         Blinds {state.config.blindStructure[state.currentBlindLevel].sb}/
         {state.config.blindStructure[state.currentBlindLevel].bb} | Main #{state.handNumber}
       </div>

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Poker Expresso - Apprends, Pratique, Domine",
-  description: "Plateforme d'apprentissage du poker format Expresso",
+  title: "PokerDuo - Apprends, Pratique, Domine",
+  description: "Plateforme d'apprentissage du poker gamifiée",
 };
 
 export default function RootLayout({

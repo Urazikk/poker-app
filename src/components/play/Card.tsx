@@ -10,10 +10,10 @@ const SUIT_SYMBOLS: Record<string, string> = {
 };
 
 const SUIT_COLORS: Record<string, string> = {
-  h: "text-red-500",
-  d: "text-blue-500",
-  c: "text-emerald-500",
-  s: "text-neutral-200",
+  h: "text-red-600",
+  d: "text-blue-600",
+  c: "text-emerald-700",
+  s: "text-neutral-900",
 };
 
 interface CardProps {
@@ -23,27 +23,27 @@ interface CardProps {
 }
 
 const SIZES = {
-  sm: "w-10 h-14 text-sm",
-  md: "w-14 h-20 text-lg",
-  lg: "w-18 h-26 text-2xl",
+  sm: "w-10 h-14 text-base",
+  md: "w-14 h-20 text-xl",
+  lg: "w-16 h-24 text-3xl",
 };
 
 export default function CardComponent({ card, faceDown = false, size = "md" }: CardProps) {
   if (!card || faceDown) {
     return (
       <div
-        className={`${SIZES[size]} rounded-lg bg-gradient-to-br from-blue-800 to-blue-950 border border-blue-600/50 flex items-center justify-center shadow-lg`}
+        className={`${SIZES[size]} rounded-md bg-gradient-to-br from-indigo-800 to-indigo-950 border-[3px] border-white flex items-center justify-center shadow-md shadow-black/80`}
       >
-        <div className="w-3/4 h-3/4 rounded border border-blue-400/30 bg-blue-900/50" />
+        <div className="w-3/4 h-3/4 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]" />
       </div>
     );
   }
 
   return (
     <div
-      className={`${SIZES[size]} rounded-lg bg-white border border-neutral-300 flex flex-col items-center justify-center shadow-lg ${SUIT_COLORS[card.suit]}`}
+      className={`${SIZES[size]} rounded-md bg-white border border-neutral-200 flex flex-col items-center justify-center shadow-md shadow-black/80 ${SUIT_COLORS[card.suit]}`}
     >
-      <span className="font-bold leading-none">{card.rank}</span>
+      <span className="font-black leading-none -mb-1">{card.rank}</span>
       <span className="leading-none">{SUIT_SYMBOLS[card.suit]}</span>
     </div>
   );
