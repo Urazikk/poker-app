@@ -1,0 +1,663 @@
+\documentclass[a4paper,11pt]{article}
+
+% === PACKAGES ===
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{colortbl}
+\usepackage{float}
+
+\geometry{margin=2.5cm}
+
+% === COULEURS ===
+\definecolor{raise}{RGB}{214,40,40}
+\definecolor{call}{RGB}{34,139,34}
+\definecolor{fold}{RGB}{160,160,160}
+\definecolor{push}{RGB}{200,80,20}
+\definecolor{darkblue}{RGB}{20,50,100}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=darkblue,
+  citecolor=darkblue,
+  urlcolor=darkblue,
+}
+
+% === EN-TETE / PIED ===
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textit{Optimisation Strat\'egique en Format Expresso}}
+\fancyhead[R]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% === THEOREMES ===
+\newtheorem{definition}{D\'efinition}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{theoreme}{Th\'eor\`eme}[section]
+
+% === COMMANDES ===
+\newcommand{\EV}{\mathrm{EV}}
+\newcommand{\Eq}{\mathrm{Eq}}
+\newcommand{\bb}{\,\mathrm{bb}}
+\newcommand{\RR}{\mathbb{R}}
+
+\title{
+  \vspace{-1cm}
+  {\Large\textsc{Rapport de Recherche}}\\[0.5cm]
+  {\LARGE\textbf{Optimisation Strat\'egique en Format Expresso :\\
+  Approche GTO et Exploitation}}\\[0.5cm]
+  {\normalsize Application au d\'eveloppement d'un syst\`eme de coaching automatis\'e}
+}
+\author{
+  Poker Expresso Research\\
+  \small\texttt{poker-expresso-app}
+}
+\date{Avril 2026}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+
+% ============================================================
+% ABSTRACT
+% ============================================================
+\begin{abstract}
+Le format Expresso (Spin \& Go) est un sit-and-go 3-max hyper-turbo caract\'eris\'e par un multiplicateur de prize pool al\'eatoire, des stacks de d\'epart courts (25\bb{} effectives) et une structure de blinds agressive. Ces param\`etres cr\'eent un environnement o\`u la variance est structurellement \'elev\'ee et o\`u la fen\^etre de d\'ecision strat\'egique se r\'eduit rapidement \`a des sc\'enarios de push-or-fold.
+
+Ce rapport formalise les fondements math\'ematiques de la prise de d\'ecision optimale dans ce format. Nous \'etablissons les mod\`eles d'Expected Value (EV) et d'\'equit\'e appliqu\'es aux situations sp\'ecifiques du 3-max, d\'etaillons les ranges pr\'eflop optimales en deep stack (20--25\bb) puis en short stack ($<10\bb$) via les \'equilibres de Nash, et analysons les fr\'equences postflop (c-bet, protection, slowplay). Enfin, nous traitons la dimension m\'eta-strat\'egique~: gestion de la bankroll selon le mod\`ele de Kelly et discipline \'emotionnelle face \`a la variance inh\'erente au format.
+
+L'objectif est de fournir la base th\'eorique rigoureuse n\'ecessaire au d\'eveloppement d'une application de coaching qui \'evalue les d\'ecisions des joueurs par rapport aux strat\'egies optimales.
+
+\medskip
+\noindent\textbf{Mots-cl\'es~:} Poker, Expresso, GTO, Nash, ICM, Push-or-Fold, Expected Value, Bankroll Management.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ============================================================
+% SECTION 1 : FONDAMENTAUX MATHEMATIQUES
+% ============================================================
+\section{Fondamentaux Math\'ematiques}
+
+\subsection{Expected Value (EV)}
+
+\begin{definition}[Expected Value]
+L'esp\'erance de gain d'une action $a$ dans un \'etat de jeu $s$ est d\'efinie par~:
+\begin{equation}
+\EV(a \mid s) = \sum_{i=1}^{n} p_i \cdot g_i
+\end{equation}
+o\`u $p_i$ repr\'esente la probabilit\'e de l'issue $i$ et $g_i$ le gain net associ\'e (positif ou n\'egatif).
+\end{definition}
+
+Dans le contexte sp\'ecifique du poker, l'EV d'un call face \`a un push adverse s'\'ecrit~:
+
+\begin{equation}
+\EV_{\text{call}} = \Eq \cdot (P + S_v) - (1 - \Eq) \cdot S_h
+\label{eq:ev_call}
+\end{equation}
+
+o\`u $\Eq$ d\'esigne l'\'equit\'e du h\'eros contre la range adverse, $P$ le pot avant le push, $S_v$ le stack effectif du vilain, et $S_h$ le montant investi par le h\'eros pour caller.
+
+\begin{proposition}[Seuil de call profitable]
+Un call est $\EV+$ si et seulement si~:
+\begin{equation}
+\Eq > \frac{S_h}{P + S_v + S_h}
+\label{eq:seuil_call}
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+On r\'esout $\EV_{\text{call}} > 0$~:
+\begin{align}
+\Eq \cdot (P + S_v) - (1 - \Eq) \cdot S_h &> 0 \\
+\Eq \cdot (P + S_v) - S_h + \Eq \cdot S_h &> 0 \\
+\Eq \cdot (P + S_v + S_h) &> S_h \\
+\Eq &> \frac{S_h}{P + S_v + S_h}
+\end{align}
+\end{proof}
+
+\subsection{\'Equit\'e et distribution combinatoire}
+
+\begin{definition}[\'Equit\'e]
+L'\'equit\'e d'une main $h$ contre une range $R$ est la probabilit\'e pond\'er\'ee de victoire~:
+\begin{equation}
+\Eq(h, R) = \frac{1}{|R|} \sum_{r \in R} \left[ P(\text{win} \mid h, r) + \frac{1}{2}\,P(\text{split} \mid h, r) \right]
+\end{equation}
+\end{definition}
+
+En Expresso, avec un deck de 52 cartes et 2 cartes distribu\'ees par joueur, le nombre de boards possibles au river est~:
+\begin{equation}
+\binom{48}{5} = 1\,712\,304
+\end{equation}
+
+Pour \'evaluer pr\'ecis\'ement l'\'equit\'e, on recourt soit \`a une \'enum\'eration exhaustive, soit \`a une simulation Monte Carlo avec convergence en $O(1/\sqrt{n})$.
+
+\subsection{C\^otes du pot et fr\'equence de bluff}
+
+Le concept de \textit{pot odds} d\'etermine la fr\'equence minimale de succ\`es pour qu'un call soit profitable~:
+\begin{equation}
+\text{Pot Odds} = \frac{\text{Mise \`a caller}}{\text{Pot total apr\`es call}} = \frac{c}{P + c}
+\end{equation}
+
+R\'eciproquement, la \textbf{fr\'equence de bluff optimale} pour rendre le vilain indiff\'erent au call s'exprime~:
+
+\begin{theoreme}[Fr\'equence de bluff GTO]
+Pour une mise de taille $b$ dans un pot $P$, la fr\'equence de bluff \`a l'\'equilibre est~:
+\begin{equation}
+f_{\text{bluff}} = \frac{b}{P + 2b}
+\label{eq:bluff_freq}
+\end{equation}
+Ce qui donne un ratio bluff/value de~:
+\begin{equation}
+\frac{\text{bluffs}}{\text{value}} = \frac{b}{P + b}
+\end{equation}
+\end{theoreme}
+
+\begin{proof}
+Le vilain doit \^etre indiff\'erent entre call et fold. Sa valeur esp\'er\'ee en callant est~:
+\[
+\EV_{\text{call}} = (1 - f_{\text{bluff}}) \cdot (-b) + f_{\text{bluff}} \cdot (P + b) = 0
+\]
+En isolant $f_{\text{bluff}}$~:
+\[
+f_{\text{bluff}} \cdot (P + b + b) = b \quad \Longrightarrow \quad f_{\text{bluff}} = \frac{b}{P + 2b}
+\]
+\end{proof}
+
+\textbf{Application num\'erique.} Pour un pot de 200 et une mise de 150~:
+\[
+f_{\text{bluff}} = \frac{150}{200 + 300} = 30\%
+\]
+Le joueur GTO doit bluffer 30\% du temps avec cette sizing pour maintenir l'\'equilibre.
+
+% ============================================================
+% SECTION 2 : STRATEGIE PREFLOP (DEEP STACK)
+% ============================================================
+\newpage
+\section{Strat\'egie Pr\'eflop en Deep Stack (20--25\,bb)}
+
+\`A 25\bb{} de profondeur effective, le jeu conserve une structure \`a trois streets et l'int\'egralit\'e des options strat\'egiques (limp, raise, 3-bet). Les ranges suivantes s'appuient sur les solutions GTO calcul\'ees pour le format 3-max avec ante au bouton (structure standard Expresso).
+
+\subsection{Open-Raise depuis le Bouton (BTN)}
+
+La position BTN (dealer) est la plus profitable en 3-max~: elle dispose de la position postflop et ne fait face qu'\`a deux adversaires. Le sizing standard est $2.0$--$2.5\bb$.
+
+\begin{table}[H]
+\centering
+\caption{Range d'Open-Raise BTN \`a 25\,bb (Sizing~: 2.5\bb)}
+\label{tab:open_btn}
+\small
+\begin{tabular}{c|*{13}{c}}
+\toprule
+ & \textbf{A} & \textbf{K} & \textbf{Q} & \textbf{J} & \textbf{T} & \textbf{9} & \textbf{8} & \textbf{7} & \textbf{6} & \textbf{5} & \textbf{4} & \textbf{3} & \textbf{2} \\
+\midrule
+\textbf{A} & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!25}R & \cellcolor{raise!20}R & \cellcolor{raise!20}R & \cellcolor{raise!15}R & \cellcolor{raise!15}R & \cellcolor{raise!15}R \\
+\textbf{K} & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!25}R & \cellcolor{raise!20}R & \cellcolor{raise!15}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{Q} & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!20}R & \cellcolor{raise!15}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{J} & \cellcolor{raise!30}R & \cellcolor{raise!25}R & \cellcolor{raise!25}R & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!20}R & \cellcolor{raise!15}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{T} & \cellcolor{raise!25}R & \cellcolor{raise!25}R & \cellcolor{raise!20}R & \cellcolor{raise!25}R & \cellcolor{raise!30}R & \cellcolor{raise!20}R & \cellcolor{raise!15}R & \cellcolor{raise!10}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{9} & \cellcolor{raise!20}R & \cellcolor{raise!15}R & \cellcolor{raise!15}R & \cellcolor{raise!15}R & \cellcolor{raise!15}R & \cellcolor{raise!25}R & \cellcolor{raise!20}R & \cellcolor{raise!15}R & \cellcolor{raise!10}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{8} & \cellcolor{raise!15}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{raise!15}R & \cellcolor{raise!25}R & \cellcolor{raise!20}R & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{7} & \cellcolor{raise!10}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{raise!15}R & \cellcolor{raise!25}R & \cellcolor{raise!15}R & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{6} & \cellcolor{raise!10}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{raise!20}R & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{fold!20}F \\
+\textbf{5} & \cellcolor{raise!10}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{raise!20}R & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{raise!10}R \\
+\textbf{4} & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{raise!20}R & \cellcolor{raise!10}R & \cellcolor{raise!10}R \\
+\textbf{3} & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{raise!15}R & \cellcolor{raise!10}R \\
+\textbf{2} & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{raise!15}R \\
+\bottomrule
+\end{tabular}
+
+\medskip
+\footnotesize
+Diagonale = paires. Au-dessus = suited. En dessous = offsuit.\\
+\textcolor{raise}{\textbf{R}} = Raise \quad \textcolor{fold}{\textbf{F}} = Fold. \quad Ouverture~: $\approx$~52\% des mains.
+\end{table}
+
+\subsection{Open-Raise depuis la Small Blind (SB)}
+
+En SB, la dynamique est heads-up directe contre la BB. Le sizing standard passe \`a $2.5$--$3\bb$ car le joueur sera hors de position postflop.
+
+\begin{table}[H]
+\centering
+\caption{Range d'Open-Raise SB \`a 25\,bb (Sizing~: 2.5\bb)}
+\label{tab:open_sb}
+\small
+\begin{tabular}{c|*{13}{c}}
+\toprule
+ & \textbf{A} & \textbf{K} & \textbf{Q} & \textbf{J} & \textbf{T} & \textbf{9} & \textbf{8} & \textbf{7} & \textbf{6} & \textbf{5} & \textbf{4} & \textbf{3} & \textbf{2} \\
+\midrule
+\textbf{A} & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!25}R & \cellcolor{raise!20}R & \cellcolor{raise!15}R & \cellcolor{raise!15}R & \cellcolor{raise!15}R & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{raise!10}R \\
+\textbf{K} & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!30}R & \cellcolor{raise!25}R & \cellcolor{raise!20}R & \cellcolor{raise!15}R & \cellcolor{raise!10}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{Q} & \cellcolor{raise!30}R & \cellcolor{raise!25}R & \cellcolor{raise!30}R & \cellcolor{raise!25}R & \cellcolor{raise!20}R & \cellcolor{raise!15}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{J} & \cellcolor{raise!25}R & \cellcolor{raise!25}R & \cellcolor{raise!20}R & \cellcolor{raise!30}R & \cellcolor{raise!20}R & \cellcolor{raise!15}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{T} & \cellcolor{raise!20}R & \cellcolor{raise!20}R & \cellcolor{raise!15}R & \cellcolor{raise!15}R & \cellcolor{raise!30}R & \cellcolor{raise!15}R & \cellcolor{raise!10}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{9} & \cellcolor{raise!15}R & \cellcolor{raise!10}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{raise!10}R & \cellcolor{raise!25}R & \cellcolor{raise!15}R & \cellcolor{raise!10}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{8} & \cellcolor{raise!10}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{raise!10}R & \cellcolor{raise!25}R & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{7} & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{raise!10}R & \cellcolor{raise!20}R & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{6} & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{raise!20}R & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{5} & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{raise!20}R & \cellcolor{raise!10}R & \cellcolor{raise!10}R & \cellcolor{fold!20}F \\
+\textbf{4} & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{raise!15}R & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{3} & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{raise!15}R & \cellcolor{fold!20}F \\
+\textbf{2} & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{raise!15}R \\
+\bottomrule
+\end{tabular}
+
+\medskip
+\footnotesize
+Ouverture SB~: $\approx$~40\% des mains. Plus serr\'e que BTN en raison du d\'esavantage positionnel.
+\end{table}
+
+\subsection{D\'efense de la Big Blind}
+
+La BB b\'en\'eficie d'un prix r\'eduit pour d\'efendre (elle a d\'ej\`a investi 1\bb). Face \`a un open de 2.5\bb, la BB n'a besoin que de 1.5\bb{} pour voir un flop dans un pot de 5.5\bb, soit des cotes de 27\%.
+
+\subsubsection{BB vs BTN Open (2.5\bb)}
+
+\begin{table}[H]
+\centering
+\caption{D\'efense BB vs Open BTN 2.5\bb{} \`a 25\bb}
+\label{tab:bb_vs_btn}
+\small
+\begin{tabular}{l l}
+\toprule
+\textbf{Action} & \textbf{Range} \\
+\midrule
+\textcolor{raise}{\textbf{3-bet All-in}} & AA, KK, QQ, AKs, AKo \\
+\textcolor{raise}{\textbf{3-bet (7.5\bb)}} & JJ, TT, AQs, AJs, KQs \\
+\textcolor{call}{\textbf{Call}} & 99--22, ATs--A2s, KJs--K9s, QJs--Q9s, \\
+ & JTs--J9s, T9s--T8s, 98s--97s, 87s--76s, 65s, 54s, \\
+ & AQo--ATo, KQo--KJo, QJo \\
+\textcolor{fold}{\textbf{Fold}} & Reste \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+La BB d\'efend environ 55--60\% des mains face au BTN, ce qui est coh\'erent avec les cotes offertes. La strat\'egie de 3-bet se divise entre une range de value (paires premium, broadways forts) et une range de bluff polaris\'ee (mains \`a bloqueurs comme A5s, A4s).
+
+\subsubsection{BB vs SB Open (2.5\bb)}
+
+\begin{table}[H]
+\centering
+\caption{D\'efense BB vs Open SB 2.5\bb{} \`a 25\bb}
+\label{tab:bb_vs_sb}
+\small
+\begin{tabular}{l l}
+\toprule
+\textbf{Action} & \textbf{Range} \\
+\midrule
+\textcolor{raise}{\textbf{3-bet All-in}} & AA, KK, QQ, JJ, AKs, AKo \\
+\textcolor{raise}{\textbf{3-bet (8\bb)}} & TT, 99, AQs, AJs, ATs, KQs, KJs \\
+\textcolor{call}{\textbf{Call}} & 88--22, A9s--A2s, KTs--K8s, QJs--Q9s, \\
+ & JTs--J9s, T9s--T8s, 98s--97s, 87s--76s, 65s, \\
+ & AQo--AJo, KQo, QJo \\
+\textcolor{fold}{\textbf{Fold}} & Reste \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Face \`a la SB, la BB 3-bet plus agressivement car le joueur hors de position a une range plus serr\'ee. La fr\'equence de 3-bet monte \`a environ 18--20\% contre 12--14\% face au BTN.
+
+
+% ============================================================
+% SECTION 3 : PUSH OR FOLD
+% ============================================================
+\newpage
+\section{Th\'eorie du Push or Fold (Short Stack $<10\bb$)}
+
+\subsection{Fondements th\'eoriques}
+
+Lorsque le stack effectif descend sous 10\bb, la strat\'egie optimale se r\'eduit \`a une d\'ecision binaire~: push (all-in) ou fold. Toute tentative de raise classique engage une fraction trop importante du stack pour permettre un fold postflop rentable.
+
+\begin{proposition}[Condition de push profitable]
+Le push est $\EV+$ si~:
+\begin{equation}
+\EV_{\text{push}} = f_{\text{fold}} \cdot P + (1 - f_{\text{fold}}) \cdot \left[\Eq \cdot (P + 2S) - S \right] > 0
+\label{eq:ev_push}
+\end{equation}
+o\`u $f_{\text{fold}}$ est la fr\'equence de fold adverse, $P$ le pot actuel (blinds + antes), $S$ le stack du h\'eros, et $\Eq$ l'\'equit\'e moyenne contre la range de call adverse.
+\end{proposition}
+
+La fold equity constitue le levier principal du push en short stack. M\^eme avec une main faible, si le vilain fold suffisamment souvent, le push est profitable gr\^ace au vol des blinds.
+
+\subsection{\'Equilibres de Nash pour le Push-or-Fold}
+
+Les tableaux suivants pr\'esentent les \'equilibres de Nash (strat\'egie non-exploitable) pour le push all-in. La notation utilise la grille standard~: ``s'' pour suited, ``o'' pour offsuit, paires sur la diagonale.
+
+\subsubsection{Push Range \`a 8\bb{} (BTN)}
+
+\begin{table}[H]
+\centering
+\caption{Nash Push Range -- BTN, 8\bb{} effectif}
+\label{tab:nash_8bb}
+\small
+\begin{tabular}{c|*{13}{c}}
+\toprule
+ & \textbf{A} & \textbf{K} & \textbf{Q} & \textbf{J} & \textbf{T} & \textbf{9} & \textbf{8} & \textbf{7} & \textbf{6} & \textbf{5} & \textbf{4} & \textbf{3} & \textbf{2} \\
+\midrule
+\textbf{A} & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P \\
+\textbf{K} & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!20}P & \cellcolor{push!15}P & \cellcolor{push!15}P & \cellcolor{push!15}P & \cellcolor{push!15}P & \cellcolor{push!15}P \\
+\textbf{Q} & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!20}P & \cellcolor{push!15}P & \cellcolor{push!15}P & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{J} & \cellcolor{push!25}P & \cellcolor{push!20}P & \cellcolor{push!20}P & \cellcolor{push!25}P & \cellcolor{push!25}P & \cellcolor{push!20}P & \cellcolor{push!15}P & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{T} & \cellcolor{push!20}P & \cellcolor{push!20}P & \cellcolor{push!15}P & \cellcolor{push!20}P & \cellcolor{push!25}P & \cellcolor{push!20}P & \cellcolor{push!15}P & \cellcolor{push!10}P & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{9} & \cellcolor{push!20}P & \cellcolor{push!15}P & \cellcolor{push!10}P & \cellcolor{push!10}P & \cellcolor{push!15}P & \cellcolor{push!25}P & \cellcolor{push!15}P & \cellcolor{push!10}P & \cellcolor{push!10}P & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{8} & \cellcolor{push!15}P & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{push!10}P & \cellcolor{push!10}P & \cellcolor{push!25}P & \cellcolor{push!15}P & \cellcolor{push!10}P & \cellcolor{push!10}P & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{7} & \cellcolor{push!15}P & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{push!10}P & \cellcolor{push!10}P & \cellcolor{push!20}P & \cellcolor{push!10}P & \cellcolor{push!10}P & \cellcolor{push!10}P & \cellcolor{fold!20}F & \cellcolor{fold!20}F \\
+\textbf{6} & \cellcolor{push!10}P & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{push!10}P & \cellcolor{push!20}P & \cellcolor{push!10}P & \cellcolor{push!10}P & \cellcolor{push!10}P & \cellcolor{fold!20}F \\
+\textbf{5} & \cellcolor{push!10}P & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{push!10}P & \cellcolor{push!20}P & \cellcolor{push!10}P & \cellcolor{push!10}P & \cellcolor{push!10}P \\
+\textbf{4} & \cellcolor{push!10}P & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{push!20}P & \cellcolor{push!10}P & \cellcolor{fold!20}F \\
+\textbf{3} & \cellcolor{push!10}P & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{push!15}P & \cellcolor{fold!20}F \\
+\textbf{2} & \cellcolor{push!10}P & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{fold!20}F & \cellcolor{push!15}P \\
+\bottomrule
+\end{tabular}
+
+\medskip
+\footnotesize
+\textcolor{push}{\textbf{P}} = Push \quad \textcolor{fold}{\textbf{F}} = Fold. \quad Fr\'equence de push~: $\approx$~48\%.
+\end{table}
+
+\subsubsection{Push Range \`a 10\bb{} (BTN)}
+
+\`A 10\bb, la range se resserre l\'eg\`erement car la fold equity diminue (le vilain call plus large avec un meilleur prix)~:
+
+\begin{table}[H]
+\centering
+\caption{Nash Push Range -- BTN, 10\bb{} effectif}
+\label{tab:nash_10bb}
+\small
+\begin{tabular}{l l}
+\toprule
+\textbf{Cat\'egorie} & \textbf{Mains} \\
+\midrule
+\textbf{Paires} & 22+ (toutes) \\
+\textbf{Broadways suited} & AKs--A2s, KQs--K8s, QJs--Q9s, JTs--J9s, T9s \\
+\textbf{Broadways offsuit} & AKo--A7o, KQo--KTo, QJo--QTo, JTo \\
+\textbf{Connecteurs suited} & T8s, 98s, 87s, 76s, 65s, 54s \\
+\bottomrule
+\end{tabular}
+
+\medskip
+\footnotesize
+Fr\'equence de push~: $\approx$~40\%.
+\end{table}
+
+\subsubsection{Push Range \`a 12\bb{} (BTN)}
+
+\`A 12\bb, on se situe \`a la fronti\`ere entre le push-or-fold pur et le jeu avec raises classiques~:
+
+\begin{table}[H]
+\centering
+\caption{Nash Push Range -- BTN, 12\bb{} effectif}
+\label{tab:nash_12bb}
+\small
+\begin{tabular}{l l}
+\toprule
+\textbf{Cat\'egorie} & \textbf{Mains} \\
+\midrule
+\textbf{Paires} & 22+ \\
+\textbf{Ax suited} & AKs--A5s \\
+\textbf{Ax offsuit} & AKo--A9o \\
+\textbf{Broadways} & KQs, KJs, KTs, QJs, QTs, JTs, KQo, KJo \\
+\textbf{Connecteurs suited} & T9s, 98s, 87s, 76s \\
+\bottomrule
+\end{tabular}
+
+\medskip
+\footnotesize
+Fr\'equence de push~: $\approx$~32\%. Au-del\`a de 12\bb, privil\'egier les min-raises.
+\end{table}
+
+\subsection{Ranges de Call vs Push}
+
+La range de call face \`a un push d\'epend du prix offert et de la range de push estim\'ee~:
+
+\begin{table}[H]
+\centering
+\caption{Call Range approximative vs Push All-in (BB position)}
+\label{tab:call_vs_push}
+\small
+\begin{tabular}{c c l}
+\toprule
+\textbf{Stack} & \textbf{Cotes offertes} & \textbf{Range de call (Nash)} \\
+\midrule
+8\bb & $\approx$~36\% & 22+, AKs--A7s, AKo--ATo, KQs--KJs, KQo, QJs \\
+10\bb & $\approx$~33\% & 33+, AKs--A9s, AKo--AJo, KQs--KTs, KQo, QJs \\
+12\bb & $\approx$~31\% & 55+, AKs--ATs, AKo--AQo, KQs, KJs \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% ============================================================
+% SECTION 4 : DYNAMIQUES POSTFLOP
+% ============================================================
+\newpage
+\section{Dynamiques Post-flop}
+
+En format Expresso, les situations postflop sont moins fr\'equentes qu'en cash game mais restent d\'eterminantes quand elles surviennent, particuli\`erement dans les premiers niveaux de blinds (20--25\bb{} effectifs).
+
+\subsection{Continuation Bet (C-Bet)}
+
+\subsubsection{Fr\'equences th\'eoriques}
+
+Le relanceur pr\'eflop dispose d'un avantage de range et d'initiative. Les fr\'equences de c-bet GTO varient selon la texture du board~:
+
+\begin{table}[H]
+\centering
+\caption{Fr\'equences de C-Bet au Flop selon la texture}
+\label{tab:cbet}
+\begin{tabular}{l c c l}
+\toprule
+\textbf{Texture} & \textbf{Fr\'equence} & \textbf{Sizing} & \textbf{Exemple} \\
+\midrule
+Dry / High & 70--80\% & 25--33\% pot & A\spadesuit\,7\heartsuit\,2\diamondsuit \\
+Monotone & 30--40\% & 25\% pot & J\spadesuit\,8\spadesuit\,3\spadesuit \\
+Connect\'e / Wet & 45--55\% & 50--66\% pot & 8\heartsuit\,7\diamondsuit\,6\clubsuit \\
+Pair\'e & 60--70\% & 25--33\% pot & K\diamondsuit\,K\clubsuit\,5\heartsuit \\
+Low / Rainbow & 65--75\% & 33\% pot & 6\heartsuit\,4\diamondsuit\,2\clubsuit \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Mod\'elisation de l'EV du C-Bet}
+
+L'esp\'erance de gain d'un c-bet de taille $b$ dans un pot $P$~:
+
+\begin{equation}
+\EV_{\text{cbet}} = f_{\text{fold}} \cdot P + (1 - f_{\text{fold}}) \cdot \left[\Eq_{\text{vs call}} \cdot (P + 2b) - b\right]
+\end{equation}
+
+Pour qu'un c-bet \textit{pur bluff} soit profitable ($\Eq \approx 0$), il faut~:
+\begin{equation}
+f_{\text{fold}} > \frac{b}{P + b}
+\end{equation}
+
+Avec un sizing de 33\% du pot~: $f_{\text{fold}} > \frac{0.33P}{1.33P} = 24.8\%$. Cette barri\`ere tr\`es basse explique la fr\'equence \'elev\'ee de c-bet sur boards secs.
+
+\subsection{Protection vs Slowplay}
+
+\begin{definition}[Protection]
+Action de miser avec une main vuln\'erable (top pair, overpair) pour d\'enier l'\'equit\'e aux draws adverses. Oppos\'ee au slowplay (checker une main forte pour induire des bluffs ou des mises value adverses).
+\end{definition}
+
+Le choix entre protection et slowplay d\'epend de deux facteurs~:
+
+\begin{equation}
+\text{Score de vuln\'erabilit\'e} = \frac{\text{Nombre de outs adverses dangereux}}{\text{Cards restantes}} \times (P + S_{\text{effectif}})
+\end{equation}
+
+\begin{table}[H]
+\centering
+\caption{Matrice de d\'ecision Protection vs Slowplay}
+\label{tab:protect_slow}
+\begin{tabular}{l c c}
+\toprule
+\textbf{Situation} & \textbf{Board sec} & \textbf{Board wet} \\
+\midrule
+Main monstre (set+) & Slowplay (60\%) & Bet (80\%) \\
+Top pair / Overpair & Bet (70\%) & Bet (90\%) \\
+Middle pair & Check-call (55\%) & Check-fold (70\%) \\
+Draw fort & Semi-bluff (65\%) & Semi-bluff (75\%) \\
+Air complet & Bluff (30--40\%) & Give up (80\%) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Sp\'ecificit\'es du 3-Max postflop}
+
+En 3-max, les pots multiway sont rares mais doivent \^etre trait\'es diff\'eremment~:
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Pots 3-way} (limp BTN, SB complete, BB check)~: R\'eduire drastiquement les fr\'equences de bluff. La probabilit\'e qu'au moins un adversaire ait touch\'e le flop passe de $\approx$~33\% (heads-up) \`a $\approx$~55\% (3-way).
+
+\item \textbf{SPR (Stack-to-Pot Ratio)} faible~: Avec un pot de 5\bb{} et des stacks de 22\bb, le SPR est de $\approx$~4.4. Cela implique qu'un engagement significatif (raise au flop ou bet/bet sur deux streets) commit g\'en\'eralement le joueur pour l'int\'egralit\'e de son stack. La planification du coup sur les trois streets est donc critique.
+\end{enumerate}
+
+
+% ============================================================
+% SECTION 5 : MENTAL & BANKROLL
+% ============================================================
+\newpage
+\section{Guide de Bonne Conduite~: Mental et Bankroll}
+
+\subsection{Gestion de la Bankroll}
+
+La variance en Expresso est significativement plus \'elev\'ee qu'en cash game ou en MTT standard. Le multiplicateur al\'eatoire (de 2x \`a 10\,000x) introduit une composante de variance exog\`ene ind\'ependante du skill.
+
+\subsubsection{Mod\`ele de Kelly fractionnel}
+
+Le crit\`ere de Kelly optimal pour la taille de buy-in est~:
+
+\begin{equation}
+f^* = \frac{p \cdot b - q}{b} = \frac{\text{edge} \times \text{ROI moyen}}{\text{variance}}
+\end{equation}
+
+o\`u $p$ est la probabilit\'e de gain, $q = 1 - p$ et $b$ le ratio de gain. En pratique, on utilise un Kelly fractionnel (25--50\% de $f^*$) pour lisser les downswings~:
+
+\begin{equation}
+f_{\text{pratique}} = \frac{f^*}{k}, \quad k \in [2, 4]
+\end{equation}
+
+\subsubsection{Recommandations de bankroll}
+
+\begin{table}[H]
+\centering
+\caption{Taille de bankroll recommand\'ee selon le profil}
+\label{tab:bankroll}
+\begin{tabular}{l c c l}
+\toprule
+\textbf{Profil} & \textbf{ROI estim\'e} & \textbf{Buy-ins} & \textbf{Logique} \\
+\midrule
+D\'ebutant & 0--2\% & 100+ & Apprentissage, variance maximale \\
+R\'egulier & 2--5\% & 60--80 & Variance mod\'er\'ee, marge de s\'ecurit\'e \\
+Pro & 5--8\% & 40--60 & Edge solide, Kelly fractionnel appliqu\'e \\
+\bottomrule
+\end{tabular}
+
+\medskip
+\footnotesize
+Un downswing de 30 buy-ins n'est pas rare m\^eme pour un joueur gagnant (probabilit\'e~$\approx$~15\%).
+\end{table}
+
+\subsection{Mod\'elisation de la variance}
+
+L'\'ecart-type du profit sur $n$ Expressos s'exprime~:
+
+\begin{equation}
+\sigma_n = \sigma_1 \cdot \sqrt{n}
+\end{equation}
+
+o\`u $\sigma_1$ est l'\'ecart-type par tournoi ($\approx$~1.8 buy-ins en Expresso standard). L'intervalle de confiance \`a 95\% du profit apr\`es $n$ tournois est~:
+
+\begin{equation}
+\text{Profit}_{95\%} = n \cdot \mu \pm 1.96 \cdot \sigma_1 \cdot \sqrt{n}
+\end{equation}
+
+\textbf{Application.} Pour un joueur avec un ROI de 3\% jouant 1000 Expressos \`a 5\texteuro~:
+\begin{align}
+\mu &= 0.03 \times 5 = 0.15\texteuro/\text{tournoi} \\
+\text{Profit esp\'er\'e} &= 1000 \times 0.15 = 150\texteuro \\
+\sigma_{1000} &= 1.8 \times 5 \times \sqrt{1000} = 284.6\texteuro \\
+\text{IC}_{95\%} &= [150 - 557.8\,,\; 150 + 557.8] = [-407.8\texteuro\,,\; +707.8\texteuro]
+\end{align}
+
+Ce calcul illustre qu'apr\`es 1000 tournois, un joueur gagnant peut encore \^etre en n\'egatif avec une probabilit\'e non n\'egligeable. C'est la r\'ealit\'e math\'ematique de la variance en Expresso.
+
+\subsection{Discipline \'Emotionnelle}
+
+Le tilt (d\'ecisions sous-optimales caus\'ees par la frustration) est le facteur destructeur de ROI num\'ero un. Formellement, le co\^ut du tilt sur $n$ sessions est~:
+
+\begin{equation}
+\text{Co\^ut}_{\text{tilt}} = \sum_{i=1}^{n} \mathbb{1}_{\text{tilt}}(i) \cdot \Delta\EV_i
+\end{equation}
+
+o\`u $\mathbb{1}_{\text{tilt}}(i)$ est l'indicatrice de tilt \`a la session $i$ et $\Delta\EV_i$ est la perte d'EV cumul\'ee due aux d\'ecisions \'emotionnelles.
+
+\subsubsection{Protocole anti-tilt recommand\'e}
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{R\`egle des 3 buy-ins}~: Arr\^eter la session apr\`es 3 buy-ins perdus cons\'ecutivement. La probabilit\'e bayesienne que le joueur soit en tilt aug\-mente exponentiellement avec les pertes en s\'erie, ind\'ependamment de la variance naturelle.
+
+\item \textbf{Volume contr\^ol\'e}~: Fixer un nombre maximum de tournois par session (40--60 Expressos). Au-del\`a, la fatigue cognitive d\'egrade la qualit\'e des d\'ecisions marginales (les d\'ecisions \`a EV faible qui distinguent les joueurs gagnants des joueurs breakeven).
+
+\item \textbf{S\'eparation r\'esultat/processus}~: \'Evaluer sa performance sur la qualit\'e des d\'ecisions (accuracy vs ranges optimales) plut\^ot que sur le r\'esultat mon\'etaire. Un joueur qui prend 90\% de d\'ecisions optimales sur 100 mains est dans une excellente trajectoire, quel que soit le r\'esultat court terme.
+
+\item \textbf{Review syst\'ematique}~: Analyser au minimum 10\% des mains jou\'ees apr\`es chaque session. Se concentrer sur les spots o\`u l'incertitude \'etait maximale plut\^ot que sur les bad beats.
+\end{enumerate}
+
+
+% ============================================================
+% CONCLUSION
+% ============================================================
+\newpage
+\section*{Conclusion}
+\addcontentsline{toc}{section}{Conclusion}
+
+Ce rapport \'etablit les fondements th\'eoriques n\'ecessaires \`a l'\'elaboration d'un syst\`eme de coaching pour le format Expresso. Les points cl\'es sont les suivants~:
+
+La ma\^itrise du push-or-fold selon les \'equilibres de Nash est la comp\'etence la plus rentable \`a d\'evelopper, car elle couvre plus de 60\% des d\'ecisions dans un Expresso typique. Les ranges pr\'eflop en deep stack, bien que moins fr\'equentes en dur\'ee, d\'eterminent l'avantage positionnel et la taille des pots qui seront jou\'es postflop. Le postflop en 3-max \`a SPR faible se r\'esume souvent \`a des d\'ecisions de commit-or-fold, rendant la planification sur trois streets essentielle d\`es le flop.
+
+Enfin, la gestion de la bankroll et la discipline \'emotionnelle ne sont pas des compl\'ements optionnels mais des conditions n\'ecessaires \`a la rentabilit\'e. Un joueur avec un edge technique de 5\% mais un probl\`eme de tilt non g\'er\'e sera structurellement perdant sur le long terme.
+
+L'application de coaching devra int\'egrer ces cinq dimensions de mani\`ere progressive~: les fondamentaux math\'ematiques comme socle, les ranges comme r\'ef\'erence actionnable, les \'equilibres de Nash comme outil de d\'ecision automatisable, le postflop comme comp\'etence avanc\'ee, et le mental comme condition de performance durable.
+
+
+% ============================================================
+% REFERENCES
+% ============================================================
+\newpage
+\begin{thebibliography}{9}
+
+\bibitem{nash1950}
+Nash, J.~F. (1950). \textit{Equilibrium Points in N-Person Games}. Proceedings of the National Academy of Sciences, 36(1), 48--49.
+
+\bibitem{chen2006}
+Chen, B., Ankenman, J. (2006). \textit{The Mathematics of Poker}. ConJelCo.
+
+\bibitem{sklansky1999}
+Sklansky, D. (1999). \textit{The Theory of Poker}. Two Plus Two Publishing.
+
+\bibitem{kelly1956}
+Kelly, J.~L. (1956). \textit{A New Interpretation of Information Rate}. Bell System Technical Journal, 35(4), 917--926.
+
+\bibitem{jennings2016}
+Jennings, M. (2016). \textit{Kill Everyone: Advanced Strategies for No-Limit Hold'em}. Two Plus Two Publishing.
+
+\bibitem{tendler2011}
+Tendler, J. (2011). \textit{The Mental Game of Poker}. Jared Tendler LLC.
+
+\end{thebibliography}
+
+\end{document}
